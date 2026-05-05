@@ -1,37 +1,12 @@
 version: "3.9"
-name: kpi-demo
+name: static-demo
 
 services:
-  redis:
-    image: redis:7
-    container_name: redis
-    restart: always
-    ports:
-      - "6379:6379"
-    networks:
-      - backend
-
-  communication-control:
-    image: ghcr.io/new-user888/hiveemulator/communication-control:latest
-    container_name: com-control
-    restart: always
-    environment:
-      Redis__ConnectionString: "redis:6379"
-    ports:
-      - "8080:8080"
-    networks:
-      - backend
-
-  map-client:
-    image: ghcr.io/new-user888/hiveemulator/map-client:latest
-    container_name: map-client
+  simple-static:
+    image: nginx:alpine
+    container_name: simple-static
     restart: always
     ports:
       - "8081:80"
     volumes:
-      - ./config.json:/usr/share/nginx/html/config.json:ro
-    networks:
-      - backend
-
-networks:
-  backend:
+      - ./static-site:/usr/share/nginx/html:ro
