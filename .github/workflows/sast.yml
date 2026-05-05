@@ -16,7 +16,7 @@ jobs:
 
       - name: Run Trivy misconfiguration scan (docker-compose)
         if: hashFiles('docker-compose.yml') != ''
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.24.0
         with:
           scan-type: 'config'
           scan-ref: 'docker-compose.yml'
@@ -26,7 +26,7 @@ jobs:
 
       - name: Run Trivy misconfiguration scan (GitHub workflows)
         if: hashFiles('.github/workflows/*.yml') != ''
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.24.0
         with:
           scan-type: 'config'
           scan-ref: '.github/workflows'
@@ -36,7 +36,7 @@ jobs:
 
       - name: Run Trivy secret scan (static-site)
         if: hashFiles('static-site/**') != ''
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.24.0
         with:
           scan-type: 'fs'
           scan-ref: 'static-site'
