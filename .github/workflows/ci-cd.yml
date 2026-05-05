@@ -6,49 +6,112 @@ on:
   pull_request:
     branches: [main, dev]
   workflow_dispatch:
+    inputs:
+      target_environment:
+        description: "Deployment target"
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - main
+      run_deploy:
+        description: "Run deploy step"
+        required: true
+        default: true
+        type: boolean
 
 env:
-  DEPLOY_PORT: ${{ secrets.DEPLOY_PORT != '' && secrets.DEPLOY_PORT || '22' }}
+  IMAGE_NAME: oleg0rolaye/devops-lab5-static
 
 jobs:
-  validate-static:
-    name: Validate Static App
+  test-and-compile:
+    name: Test and Compile Static App
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate static files
+      - name: Validate project files
         run: |
           test -f static-site/index.html
           test -f static-site/styles.css
+          test -f static-site/Dockerfile
+          test -f docker-compose.yml
 
-  deploy:
-    name: Deploy Static App (VPS)
+      - name: Compile static bundle
+        run: |
+          mkdir -p dist
+          cp -r static-site/* dist/
+          test -f dist/index.html
+          test -f dist/styles.css
+
+  build-and-push-image:
+    name: Build and Push Static Image
     runs-on: ubuntu-latest
-    needs: validate-static
+    needs: test-and-compile
     if: |
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'))
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set tags
+        id: meta
+        run: |
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then
+            echo "branch_tag=main-latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "branch_tag=dev-latest" >> "$GITHUB_OUTPUT"
+          fi
+          echo "sha_tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: oleg0rolaye
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push image
+        run: |
+          docker build \
+            -t ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.branch_tag }} \
+            -t ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.sha_tag }} \
+            -t ${{ env.IMAGE_NAME }}:latest \
+            ./static-site
+          docker push ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.branch_tag }}
+          docker push ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.sha_tag }}
+          docker push ${{ env.IMAGE_NAME }}:latest
+
+  deploy-main:
+    name: Deploy MAIN to VPS
+    runs-on: ubuntu-latest
+    needs: build-and-push-image
+    env:
+      DEPLOY_PORT: ${{ secrets.PROD_DEPLOY_PORT != '' && secrets.PROD_DEPLOY_PORT || '22' }}
+      IMAGE_TAG: main-latest
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.run_deploy == 'true' && github.event.inputs.target_environment == 'main')
     steps:
       - uses: actions/checkout@v4
 
       - name: Prepare SSH key
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.PROD_DEPLOY_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -p "${{ env.DEPLOY_PORT }}" "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+          ssh-keyscan -p "${{ env.DEPLOY_PORT }}" "${{ secrets.PROD_DEPLOY_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Upload static app to VPS
+      - name: Upload compose file to MAIN VPS
         run: |
-          ssh -p "${{ env.DEPLOY_PORT }}" "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "mkdir -p '${{ secrets.DEPLOY_PATH }}/static-site'"
-          scp -P "${{ env.DEPLOY_PORT }}" docker-compose.yml "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/"
-          scp -P "${{ env.DEPLOY_PORT }}" static-site/* "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/static-site/"
+          ssh -p "${{ env.DEPLOY_PORT }}" "${{ secrets.PROD_DEPLOY_USER }}@${{ secrets.PROD_DEPLOY_HOST }}" "mkdir -p '${{ secrets.PROD_DEPLOY_PATH }}'"
+          scp -P "${{ env.DEPLOY_PORT }}" docker-compose.yml "${{ secrets.PROD_DEPLOY_USER }}@${{ secrets.PROD_DEPLOY_HOST }}:${{ secrets.PROD_DEPLOY_PATH }}/"
 
-      - name: Restart docker compose on VPS
+      - name: Deploy docker compose on MAIN VPS
         run: |
-          ssh -p "${{ env.DEPLOY_PORT }}" "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" '
+          ssh -p "${{ env.DEPLOY_PORT }}" "${{ secrets.PROD_DEPLOY_USER }}@${{ secrets.PROD_DEPLOY_HOST }}" '
             set -e
-            cd "${{ secrets.DEPLOY_PATH }}"
-            docker compose up -d --remove-orphans
+            cd "${{ secrets.PROD_DEPLOY_PATH }}"
+            IMAGE_TAG="${{ env.IMAGE_TAG }}" docker compose pull
+            IMAGE_TAG="${{ env.IMAGE_TAG }}" docker compose up -d --remove-orphans
           '
