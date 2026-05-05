@@ -3,10 +3,8 @@ name: static-demo
 
 services:
   simple-static:
-    image: nginx:alpine
+    image: oleg0rolaye/devops-lab5-static:${IMAGE_TAG:-latest}
     container_name: simple-static
     restart: always
     ports:
       - "8081:80"
-    volumes:
-      - ./static-site:/usr/share/nginx/html:ro
