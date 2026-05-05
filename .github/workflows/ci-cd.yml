@@ -22,7 +22,7 @@ on:
         type: boolean
 
 env:
-  IMAGE_NAME: oleg0rolaye/devops-lab5-static
+  IMAGE_NAME: oleg0royale/devops-lab5-static
 
 jobs:
   test-and-compile:
