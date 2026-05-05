@@ -1,9 +1,8 @@
-version: "3.9"
 name: static-demo
 
 services:
   simple-static:
-    image: oleg0rolaye/devops-lab5-static:${IMAGE_TAG:-latest}
+    image: oleg0royale/devops-lab5-static:${IMAGE_TAG:-latest}
     container_name: simple-static
     restart: always
     ports:
